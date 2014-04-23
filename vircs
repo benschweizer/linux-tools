@@ -1,0 +1,32 @@
+#!/bin/sh
+# vim: ts=4
+#
+# Copyright (c) 2007 Benjamin Schweizer.
+#
+#
+# Abstract
+# ~~~~~~~~
+# Opens vi for RCS files if present, otherwise creates RCS files
+#
+# Authors
+# ~~~~~~~
+# Benjamin Schweizer, http:///benjamin-schweizer.de/contact
+#
+# Changes
+# ~~~~~~~
+# 2007-09-28, benjamin: initial release
+#
+# Todo
+# ~~~~
+# - we'll see
+#
+
+which vi > /dev/null 2>&1  || exit 1
+which rcs > /dev/null 2>&1 || exit 2
+test "${1}" || exit 3
+
+co -l $@ 2> /dev/null
+vi $@
+ci -u $@
+
+# eof.

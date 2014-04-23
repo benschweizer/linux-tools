@@ -1,0 +1,193 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim: ts=4
+#
+# Copyright (c) 2007-2008 Benjamin Schweizer.
+#
+# Abstract
+# ~~~~~~~~
+# an interactive editor for pickle encoded data structures
+#
+# Authors
+# ~~~~~~~
+# Benjamin Schweizer, http://benjamin-schweizer.de/contact
+#
+# Changes
+# ~~~~~~~
+# 2008-11-13, benjamin: added NoneType
+# 2007-10-15, benjamin: fixed environment bug (thanx hautzi)
+# 2007-09-28, benjamin: fixed bug on file creation
+# 2007-06-18, benjamin: added multi file edit
+# 2007-06-05, benjamin: reworked indent
+# 2007-06-04, benjamin: initial release
+#
+# Todo
+# ~~~~~
+# - testing, especially indent()
+# - error handling
+#
+
+import sys
+import tempfile
+import subprocess
+import os
+import pickle
+import types
+
+def usage():
+	print """Copyright (c) 2007 Benjamin Schweizer. All rights reserved.
+
+pedit - an interactive editor for pickle encoded data structures
+
+usage:
+
+	pedit FILENAME [FILENAME FILENAME ...]
+
+"""
+
+def indent(data, level=0, bol=True):
+	"""poor man's indent"""
+	def escape(str):
+		"""string escape"""
+
+		newstr = ''
+		for c in str:
+			if ord(c) in range(128):
+				newstr += c
+			else:
+				newstr += '\\x%2x' % ord(c)
+		str = newstr
+		
+		if '\r' in str or '\n' in str:
+			return '"""%s"""' % str
+		else:
+			return '"%s"' % str.replace('"', '\\"')
+
+	result = ''
+	if bol:
+		result += '  ' * level
+
+	if type(data) == types.ListType:
+		if not len(data):
+			result += '[]'
+		else:
+			result += '[\n'
+			for e in data:
+				result += indent(e, level+1)
+			result += '  ' * level + ']'
+	elif type(data) == types.DictType:
+		if not len(data):
+			result += '{}'
+		else:
+			result += '{\n'
+			for k in data:
+				v = data[k]
+				result += '  ' * (level+1) + '%s: ' % escape(k)
+				result += indent(v, level+1, bol=False)
+			result += '  ' * level + '}'
+	elif type(data) == types.TupleType:
+		if not len(data):
+			result += '()'
+		else:
+			result += '(\n'
+			for e in data:
+				result += indent(e, level+1)
+			result += '  ' * level + ')'
+	elif type(data) == types.IntType:
+		result += '%d' % data
+	elif type(data) == types.LongType:
+		result += '%dL' % data
+	elif type(data) == types.FloatType:
+		result += '%f' % data
+	elif type(data) == types.BooleanType:
+		result += '%s' % data
+	elif type(data) == types.StringType:
+		result += '%s' % escape(data)
+	elif type(data) == types.UnicodeType:
+		result += 'u%s' % escape(data)
+	elif type(data) == types.NoneType:
+		result += 'None'
+	else:
+		raise Exception('unhandeled data type, %s' % type(data))
+
+	if level:
+		result += ','
+	result += '\n'
+
+	return result
+
+
+if __name__ == '__main__':
+	temp_filenames = {}	# source_filename: temp_filename
+
+	if len(sys.argv) < 2 or '--help' in sys.argv:
+		usage()
+		sys.exit(1)
+
+	for source_filename in sys.argv[1:]:
+		if source_filename[0] == '-':
+			break
+
+		# load pickle data
+		try:
+			fh = open(source_filename, 'rb')
+			data = pickle.load(fh)
+			fh.close()
+		except IOError, error:
+			if not error.errno == 2:
+				raise
+			# else: file not found
+			data = False
+
+		# export pretty printed data
+		fd, temp_filename = tempfile.mkstemp()
+		fh = os.fdopen(fd, "w+b")
+		fh.write('# %s - pedit\n\n' % source_filename)
+		fh.write(indent(data))
+		fh.write('\n# eof.')
+		fh.close()
+
+		temp_filenames[source_filename] = temp_filename
+	
+	if not temp_filenames:
+		usage()
+		sys.exit(1)
+
+	# edit tempfiles
+	editor = 'vi'
+	if 'EDITOR' in os.environ:
+		editor = os.environ['EDITOR']
+	process = subprocess.Popen([editor] + temp_filenames.values())
+	process.communicate()
+	# process.wait()
+
+	# update sources
+	for source_filename in temp_filenames:
+		temp_filename = temp_filenames[source_filename]
+		# re-import sourcefile (slow but cleaner code)
+		try:
+			fh = open(source_filename, 'rb')
+			source_data = pickle.load(fh)
+			fh.close()
+		except IOError, error:
+			if not error.errno == 2:
+				raise
+			# else: file not found
+			source_data = False
+
+		# import tempfile
+		fh = open(temp_filename, "rb")
+		temp_data = eval(fh.read())
+		fh.close()
+
+		if source_data != temp_data:
+			print "updating '%s'" % source_filename
+			fh = open(source_filename, 'wb')
+			pickle.dump(temp_data, fh)
+			fh.close()
+		else:
+			print "ignoring '%s' (nothing changed)" % source_filename
+
+		os.unlink(temp_filename)
+
+# eof.

@@ -1,0 +1,19 @@
+#!/bin/sh
+# vim: ts=4
+#
+# lsrestart - list processes that map deleted libraries
+#
+# Copyright (c) 2014 Benjamin Schweizer.
+#
+# 20140423 cxcv: initial code
+#
+
+PIDS=`grep -E '/usr/lib.*\(deleted\)$' /proc/*/maps 2>/dev/null | cut -d ":" -f1 | uniq | cut -d/ -f3`
+for PID in $PIDS; do
+    COMM=`ps -p $PID -o comm --no-header`
+    USER=`ps -p $PID -o user --no-header`
+    echo "$COMM($PID,$USER)"
+    grep -E '/usr/lib.*\(deleted\)$'  /proc/$PID/maps | cut -c 72- | uniq
+done
+
+# eof.
