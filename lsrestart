@@ -6,7 +6,10 @@
 # Copyright (c) 2014 Benjamin Schweizer.
 #
 # 20140423 cxcv: initial code
+# 20140424 cxcv: check if /proc is available 
 #
+
+test -f /proc/1/maps || { echo "/proc not found" 1>&2; exit 1; }
 
 PIDS=`grep -E '/usr/lib.*\(deleted\)$' /proc/*/maps 2>/dev/null | cut -d ":" -f1 | uniq | cut -d/ -f3`
 for PID in $PIDS; do
